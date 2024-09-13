@@ -13,10 +13,10 @@ def local(ctx):
     """Run benchmarks on localhost"""
     bench_params = {
         "faults": 0,
-        "nodes": 4,
+        "nodes": 7,
         "rate": 1_000,
         "tx_size": 512,
-        "duration": 20,
+        "duration": 50,
     }
     node_params = {
         "consensus": {

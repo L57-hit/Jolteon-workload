@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 > **Note to readers:** This codebase is useful to get started with BFT consensus and as baseline when designing your own protocols. If you are looking for state-of-the-art BFT protocols, I recommend [Tusk](https://github.com/asonnino/narwhal) (asynchronous) and [Bullshark](https://github.com/asonnino/narwhal/tree/bullshark) (partially-synchronous) that provide superior performance, robustness, and scalability.
 
 # HotStuff
@@ -65,3 +66,4 @@ The [wiki](https://github.com/asonnino/hotstuff/wiki) documents the codebase, ex
 ## License
 
 This software is licensed as [Apache 2.0](LICENSE).
+

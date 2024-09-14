@@ -4,7 +4,7 @@ use crate::consensus::{ConsensusMessage, Round};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::MempoolDriver;
-use crate::messages::{Block, Timeout, Vote, QC, TC};
+use crate::messages::{Block, Timeout, Vote, ComVote, QC, ComQc, TC};
 use crate::proposer::ProposerMessage;
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
@@ -37,6 +37,7 @@ pub struct Core {
     tx_commit: Sender<Block>,
     round: Round,
     last_voted_round: Round,
+    last_com_voted_round: Round,
     last_committed_round: Round,
     high_qc: QC,
     timer: Timer,
@@ -114,6 +115,43 @@ impl Core {
         // TODO [issue #15]: Write to storage preferred_round and last_voted_round.
         Some(Vote::new(block, self.name, self.signature_service.clone()).await)
     }
+
+    /// 生成并发送 ComVote 的函数
+async fn make_com_vote(&mut self, qc: &QC) -> Option<ComVote> {
+    // 获取QC对应区块的作者节点
+    
+        self.process_qc(qc).await;
+    
+    let block_author = qc.block_author();
+
+    // 如果QC不是由区块生成者发送的，则不投票
+    if block_author != self.name {
+        return None;
+    }
+
+    // 生成ComVote
+    let com_vote = ComVote::new(
+        qc.hash.clone(),                          // block hash
+        qc.round,
+        self.name,                   // 当前节点的公钥（投票人）
+        self.signature_service.clone(), // 签名服务，用于生成签名
+    ).await;
+
+    // 将生成的com vote发送给产生该区块的节点
+    let block_author_address = self
+        .committee
+        .address(&block_author)
+        .expect("Block author not in committee");
+    let message = bincode::serialize(&ConsensusMessage::ComVote(com_vote.clone()))
+        .expect("Failed to serialize com vote");
+
+    // 发送com vote到产生该区块的节点
+    self.network.send(block_author_address, Bytes::from(message)).await;
+
+    // 返回生成的com vote
+    Some(com_vote)
+}
+
 
     async fn commit(&mut self, block: Block) -> ConsensusResult<()> {
         if self.last_committed_round >= block.round {
@@ -224,6 +262,51 @@ impl Core {
         Ok(())
     }
 
+    async fn handle_com_vote(&mut self, com_vote: &ComVote) -> ConsensusResult<()> {
+        debug!("Processing {:?}", com_vote);
+        
+        // 如果接收到的 com vote 所属轮次小于当前轮次，直接返回
+        if com_vote.round < self.round {
+            return Ok(());
+        }
+    
+        // 确保 com vote 结构的正确性
+        com_vote.verify(&self.committee)?;
+    
+        // 将新的 com vote 添加到 com vote 聚合器中，并检查是否有足够的票生成 ComQC
+        if let Some(com_qc) = self.com_aggregator.add_com_vote(com_vote.clone())? {
+            debug!("Assembled ComQC {:?}", com_qc);
+    
+            // 如果生成了 com_qc，则处理它
+            self.handle_com_qc(&com_qc).await;
+    
+            // 使用现有的消息发送机制发送 ComQC 给其他节点
+        let message = ConsensusMessage::ComQC(com_qc); // 假设 ConsensusMessage::ComQC 是定义好的消息类型
+        let addresses = self.committee.broadcast_addresses(); // 获取要广播的地址列表
+
+        for address in addresses {
+            // 假设已有的 self.network.send 函数用于发送消息
+            self.network.send(address, &message).await?;
+        }
+        }
+    
+        Ok(())
+    }
+    
+
+    async fn handle_com_qc(&mut self, com_qc: &ComQc) -> ConsensusResult<()> {
+        // 验证 com qc 的有效性
+        if self.verify_com_qc(com_qc).is_ok() {
+            // 提交对应的区块
+            let block = self.block_store.get(&com_qc.block_id);
+            if let Some(b0) = block {
+                self.commit(b0).await?;
+            }
+        }
+        Ok(())
+    }
+    
+
     async fn handle_timeout(&mut self, timeout: &Timeout) -> ConsensusResult<()> {
         debug!("Processing {:?}", timeout);
         if timeout.round < self.round {
@@ -330,10 +413,10 @@ impl Core {
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
-        if b0.round + 1 == b1.round {
-            self.mempool_driver.cleanup(b0.round).await;
-            self.commit(b0).await?;
-        }
+// if b0.round + 1 == b1.round {
+//     self.mempool_driver.cleanup(b0.round).await;
+//     self.commit(b0).await?;
+// }
 
         // Ensure the block's round is as expected.
         // This check is important: it prevents bad leaders from producing blocks
@@ -341,26 +424,62 @@ impl Core {
         if block.round != self.round {
             return Ok(());
         }
+                // 生成投票
+if let Some(vote) = self.make_vote(block).await {
+    debug!("Created {:?}", vote);
+    
+    // 获取下一个轮次的领导者
+    let next_leader = self.leader_elector.get_leader(self.round + 1);
+    let current_leader = block.proposer; // 当前区块的领导者
+
+    // 发送投票给下一个轮次的领导者
+    if next_leader == self.name {
+        self.handle_vote(&vote).await?;
+    } else {
+        debug!("Sending {:?} to {}", vote, next_leader);
+        let address = self
+            .committee
+            .address(&next_leader)
+            .expect("The next leader is not in the committee");
+        let message = bincode::serialize(&ConsensusMessage::Vote(vote.clone()))
+            .expect("Failed to serialize vote");
+        self.network.send(address, Bytes::from(message)).await;
+    }
+
+    // 发送投票给当前区块的领导者
+    if current_leader != self.name {
+        debug!("Sending {:?} to current leader {}", vote, current_leader);
+        let address = self
+            .committee
+            .address(&current_leader)
+            .expect("The current leader is not in the committee");
+        let message = bincode::serialize(&ConsensusMessage::Vote(vote))
+            .expect("Failed to serialize vote");
+        self.network.send(address, Bytes::from(message)).await;
+    }
+}
 
         // See if we can vote for this block.
-        if let Some(vote) = self.make_vote(block).await {
-            debug!("Created {:?}", vote);
-            let next_leader = self.leader_elector.get_leader(self.round + 1);
-            if next_leader == self.name {
-                self.handle_vote(&vote).await?;
-            } else {
-                debug!("Sending {:?} to {}", vote, next_leader);
-                let address = self
-                    .committee
-                    .address(&next_leader)
-                    .expect("The next leader is not in the committee");
-                let message = bincode::serialize(&ConsensusMessage::Vote(vote))
-                    .expect("Failed to serialize vote");
-                self.network.send(address, Bytes::from(message)).await;
-            }
-        }
+        // if let Some(vote) = self.make_vote(block).await {
+        //     debug!("Created {:?}", vote);
+        //     let next_leader = self.leader_elector.get_leader(self.round + 1);
+        //     if next_leader == self.name {
+        //         self.handle_vote(&vote).await?;
+        //     } else {
+        //         debug!("Sending {:?} to {}", vote, next_leader);
+        //         let address = self
+        //             .committee
+        //             .address(&next_leader)
+        //             .expect("The next leader is not in the committee");
+        //         let message = bincode::serialize(&ConsensusMessage::Vote(vote))
+        //             .expect("Failed to serialize vote");
+        //         self.network.send(address, Bytes::from(message)).await;
+        //     }
+        // }
         Ok(())
     }
+
+  
 
     async fn handle_proposal(&mut self, block: &Block) -> ConsensusResult<()> {
         let digest = block.digest();

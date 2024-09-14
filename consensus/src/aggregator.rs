@@ -1,7 +1,7 @@
 use crate::config::{Committee, Stake};
 use crate::consensus::Round;
 use crate::error::{ConsensusError, ConsensusResult};
-use crate::messages::{Timeout, Vote, QC, TC};
+use crate::messages::{Timeout, Vote, ComVote, QC, ComQc, TC};
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, Signature};
 use std::collections::{HashMap, HashSet};
@@ -54,6 +54,36 @@ impl Aggregator {
         self.timeouts_aggregators.retain(|k, _| k >= round);
     }
 }
+
+pub struct ComAggregator {
+    committee: Committee,
+    com_votes_aggregators: HashMap<Round, HashMap<Digest, Box<ComQCMaker>>>, // 用于按轮次和区块哈希聚合ComVote
+}
+
+impl ComAggregator {
+    pub fn new(committee: Committee) -> Self {
+        Self {
+            committee,
+            com_votes_aggregators: HashMap::new(),
+        }
+    }
+
+    pub fn add_com_vote(&mut self, com_vote: ComVote) -> ConsensusResult<Option<ComQC>> {
+        // 将新的com_vote添加到聚合器中，并检查是否已经有足够的ComVote生成ComQC
+        self.com_votes_aggregators
+            .entry(com_vote.round)
+            .or_insert_with(HashMap::new)
+            .entry(com_vote.hash.clone()) // 使用ComVote中的hash作为键
+            .or_insert_with(|| Box::new(ComQCMaker::new()))
+            .append(com_vote, &self.committee)
+    }
+
+    pub fn cleanup(&mut self, round: &Round) {
+        // 清理旧轮次的投票数据，释放内存
+        self.com_votes_aggregators.retain(|k, _| k >= round);
+    }
+}
+
 
 struct QCMaker {
     weight: Stake,

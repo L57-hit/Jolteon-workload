@@ -146,6 +146,52 @@ impl Vote {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ComVote {
+    pub hash: Digest,        // 区块的哈希
+    pub round: Round,        // 轮次
+    pub author: PublicKey,   // 投票者的公钥
+    pub signature: Signature,// 投票的签名
+    //pub vote_type: String,   // 投票类型，区分普通 vote 和 com vote
+}
+
+impl ComVote {
+    // 构造一个新的 ComVote 实例
+    pub async fn new(
+        hash: Digest,          // 接收 QC 而不是 Block，因为 com vote 针对 QC
+        round: Round,
+        author: PublicKey,
+        mut signature_service: SignatureService,
+    ) -> Self {
+        let com_vote = Self {
+            hash,            // QC 对应区块的哈希值
+            round,              // QC 的轮次
+            author,                       // 当前投票的节点
+            signature: Signature::default(), // 初始化为空签名
+        };
+        
+        // 签名 QC 的哈希，标识这个 com vote
+        let signature = signature_service.request_signature(com_vote.hash.clone()).await;
+        
+        // 返回包含签名的 ComVote
+        Self { signature, ..com_vote }
+    }
+
+    // 验证 com vote 的正确性
+    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+        // 确保投票者在委员会中具有投票权
+        ensure!(
+            committee.stake(&self.author) > 0,
+            ConsensusError::UnknownAuthority(self.author)
+        );
+
+        // 验证签名的正确性
+        self.signature.verify(&self.hash, &self.author)?;
+        Ok(())
+    }
+}
+
+
 impl Hash for Vote {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
@@ -166,6 +212,7 @@ pub struct QC {
     pub hash: Digest,
     pub round: Round,
     pub votes: Vec<(PublicKey, Signature)>,
+    pub block_author: PublicKey,  // 添加这个字段来存储区块的作者
 }
 
 impl QC {
@@ -218,6 +265,71 @@ impl PartialEq for QC {
         self.hash == other.hash && self.round == other.round
     }
 }
+impl QC {
+    pub fn block_author(&self) -> PublicKey {
+        self.block_author
+    }
+}
+
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+pub struct ComQc {
+    pub hash: Digest,
+    pub round: Round,
+    pub com_votes: Vec<(PublicKey, Signature)>, // 由com vote构成的签名集合
+}
+
+impl ComQc {
+    pub fn new(hash: Digest, round: Round, com_votes: Vec<(PublicKey, Signature)>) -> Self {
+        Self {
+            hash,
+            round,
+            com_votes,
+        }
+    }
+
+    // 验证 ComQc 的有效性
+    pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+        // 确保 ComQc 拥有足够多的 com votes
+        let mut weight = 0;
+        let mut used = HashSet::new();
+        for (name, _) in self.com_votes.iter() {
+            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
+            let voting_rights = committee.stake(name);
+            ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
+            used.insert(*name);
+            weight += voting_rights;
+        }
+        ensure!(
+            weight >= committee.quorum_threshold(),
+            ConsensusError::QCRequiresQuorum
+        );
+
+        // 检查签名的有效性
+        Signature::verify_batch(&self.digest(), &self.com_votes).map_err(ConsensusError::from)
+    }
+
+    // 生成唯一的摘要，用于签名验证
+    pub fn digest(&self) -> Digest {
+        let mut hasher = Sha512::new();
+        hasher.update(&self.hash);
+        hasher.update(self.round.to_le_bytes());
+        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
+    }
+}
+
+impl fmt::Debug for ComQc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "ComQc({}, {})", self.hash, self.round)
+    }
+}
+
+impl PartialEq for ComQc {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash && self.round == other.round
+    }
+}
+
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Timeout {

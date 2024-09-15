@@ -118,6 +118,7 @@ impl QCMaker {
                 hash: vote.hash.clone(),
                 round: vote.round,
                 votes: self.votes.clone(),
+                block_author: vote.block_author,
             }));
         }
         Ok(None)
@@ -159,6 +160,7 @@ impl ComQCMaker {
             return Ok(Some(ComQC {
                 hash: com_vote.hash.clone(),  // 使用 ComVote 中的 hash
                 round: com_vote.round,        // 使用 ComVote 中的轮次
+                block_author: com_vote.block_author,
                 com_votes: self.com_votes.clone(),  // 收集到的 ComVote
             }));
         }

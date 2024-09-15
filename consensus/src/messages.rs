@@ -114,6 +114,7 @@ pub struct Vote {
     pub hash: Digest,
     pub round: Round,
     pub author: PublicKey,
+    pub block_author: PublicKey,
     pub signature: Signature,
 }
 
@@ -127,6 +128,7 @@ impl Vote {
             hash: block.digest(),
             round: block.round,
             author,
+            block_author: block.author,
             signature: Signature::default(),
         };
         let signature = signature_service.request_signature(vote.digest()).await;
@@ -166,6 +168,7 @@ pub struct ComVote {
     pub hash: Digest,        // 区块的哈希
     pub round: Round,        // 轮次
     pub author: PublicKey,   // 投票者的公钥
+    pub block_author: PublicKey,
     pub signature: Signature,// 投票的签名
     //pub vote_type: String,   // 投票类型，区分普通 vote 和 com vote
 }
@@ -173,24 +176,24 @@ pub struct ComVote {
 impl ComVote {
     // 构造一个新的 ComVote 实例
     pub async fn new(
-        hash: Digest,          // 接收 QC 而不是 Block，因为 com vote 针对 QC
-        round: Round,
+        qc: &QC,
         author: PublicKey,
         mut signature_service: SignatureService,
     ) -> Self {
         let com_vote = Self {
-            hash,            // QC 对应区块的哈希值
-            round,              // QC 的轮次
-            author,                       // 当前投票的节点
-            signature: Signature::default(), // 初始化为空签名
+            hash: qc.hash.clone(),
+            round: qc.round,
+            author,
+            block_author: qc.block_author,
+            signature: Signature::default(),
         };
-        
         // 签名 QC 的哈希，标识这个 com vote
         let signature = signature_service.request_signature(com_vote.hash.clone()).await;
         
         // 返回包含签名的 ComVote
         Self { signature, ..com_vote }
     }
+   
 
     // 验证 com vote 的正确性
     pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
@@ -298,15 +301,16 @@ pub struct ComQC {
     pub hash: Digest,
     pub round: Round,
     pub com_votes: Vec<(PublicKey, Signature)>, // 由com vote构成的签名集合
-    pub sender: PublicKey,  // 添加发送者字段
+    pub block_author: PublicKey  // 添加发送者字段
 }
 
 impl ComQC {
-    pub fn new(hash: Digest, round: Round, com_votes: Vec<(PublicKey, Signature)>) -> Self {
+    pub fn new(hash: Digest, round: Round, com_votes: Vec<(PublicKey, Signature)>, block_author: PublicKey) -> Self {
         Self {
             hash,
             round,
             com_votes,
+            block_author,
         }
     }
 

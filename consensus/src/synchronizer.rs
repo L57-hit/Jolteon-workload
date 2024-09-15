@@ -147,4 +147,20 @@ impl Synchronizer {
             .expect("We should have all ancestors of delivered blocks");
         Ok(Some((b0, b1)))
     }
+
+    pub async fn get_block_by_hash(&mut self, block_hash: &Digest) -> ConsensusResult<Option<Block>> {
+        // 从存储中读取区块的字节数据
+        match self.store.read(block_hash.to_vec()).await? {
+            Some(bytes) => {
+                // 如果找到了区块字节数据，反序列化并返回区块
+                let block: Block = bincode::deserialize(&bytes)?;
+                Ok(Some(block))
+            },
+            None => {
+                // 如果没有找到对应区块，则返回 None
+                Ok(None)
+            }
+        }
+    }
+    
 }

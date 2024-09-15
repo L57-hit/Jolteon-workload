@@ -117,40 +117,58 @@ impl Core {
         Some(Vote::new(block, self.name, self.signature_service.clone()).await)
     }
 
-    /// 生成并发送 ComVote 的函数
-async fn make_com_vote(&mut self, qc: &QC) -> Option<ComVote> {
+            /// 根据收到的 QC 来生成 ComVote，先验证 QC 是否有效
+async fn make_com_vote(&self, qc: &QC) -> Option<ComVote> {
+    // 检查 QC 是否有效
+    if let Err(e) = qc.verify(&self.committee) {
+        // 如果 QC 无效，打印错误并返回 None
+        println!("Invalid QC: {:?}", e);
+        return None;
+    }
+
+    // 如果 QC 有效，生成 ComVote
+    let com_vote = ComVote::new(
+        qc,
+        self.name,                              // 当前节点的公钥（投票人）
+        self.signature_service.clone(),           // 签名服务，用于生成签名
+    ).await;
+
+    Some(com_vote)  // 返回生成的 ComVote
+}
+
+/// 处理接收到的 QC
+async fn handle_qc(&mut self, qc: &QC) -> Option<ComVote> {
+    // 处理QC以确保其合法性
+    self.process_qc(qc).await;
+
     // 获取QC对应区块的作者节点
-    
-        self.process_qc(qc).await;
-    
     let block_author = qc.block_author();
 
-    // 如果QC不是由区块生成者发送的，则不投票
+    // 如果 QC 不是由区块生成者发送，则不处理
     if block_author != self.name {
         return None;
     }
 
-    // 生成ComVote
-    let com_vote = ComVote::new(
-        qc.hash.clone(),                          // block hash
-        qc.round,
-        self.name,                   // 当前节点的公钥（投票人）
-        self.signature_service.clone(), // 签名服务，用于生成签名
-    ).await;
+    // 尝试生成 ComVote
+    if let Some(com_vote) = self.make_com_vote(qc).await {
+        // 获取生成该区块的节点的地址信息
+        let block_author_address = self
+            .committee
+            .address(&block_author)
+            .expect("Block author not in committee");
 
-    // 将生成的com vote发送给产生该区块的节点
-    let block_author_address = self
-        .committee
-        .address(&block_author)
-        .expect("Block author not in committee");
-    let message = bincode::serialize(&ConsensusMessage::ComVote(com_vote.clone()))
-        .expect("Failed to serialize com vote");
+        // 将 ComVote 消息序列化并发送给区块作者
+        let message = bincode::serialize(&ConsensusMessage::ComVote(com_vote.clone()))
+            .expect("Failed to serialize com vote");
 
-    // 发送com vote到产生该区块的节点
-    self.network.send(block_author_address, Bytes::from(message)).await;
+        // 发送 ComVote 投票消息到区块作者
+        self.network.send(block_author_address, Bytes::from(message)).await;
 
-    // 返回生成的com vote
-    Some(com_vote)
+        // 返回生成的 ComVote
+        return Some(com_vote);
+    }
+
+    None
 }
 
 
@@ -280,7 +298,7 @@ async fn make_com_vote(&mut self, qc: &QC) -> Option<ComVote> {
             debug!("Assembled ComQC {:?}", com_qc);
     
             // 如果生成了 com_qc，则处理它
-            self.handle_com_qc(com_qc).await;
+            self.handle_com_qc(com_qc.clone()).await;
     
             // 使用现有的消息发送机制发送 ComQC 给其他节点
             debug!("Broadcasting ComQC {:?}", com_qc);
@@ -311,54 +329,32 @@ async fn make_com_vote(&mut self, qc: &QC) -> Option<ComVote> {
     
 
     pub async fn handle_com_qc(&mut self, com_qc: ComQC) -> ConsensusResult<()> {
-        let qc_block_id = com_qc.hash;
-        
+        let qc_block_id = &com_qc.hash;
+    
         // Step 1: Verify that the ComQC is valid.
         com_qc.verify(&self.committee)?;
     
         // Step 2: Ensure the block corresponding to the ComQC exists.
-        let block_option: Result<Option<Block>, _> = match self.store.read(qc_block_id.to_vec()).await {
-            Ok(Some(bytes)) => Ok(Some(bincode::deserialize(&bytes)?)),
-            Ok(None) => {
-                debug!("Processing of {} suspended: missing block", qc_block_id);
-                return Ok(()); // Block not found, processing suspended
+        // 从存储中通过 hash 获取区块
+        let block = match self.synchronizer.get_block_by_hash(&qc_block_id).await? {
+            Some(block) => {
+                // 找到了区块，处理 block
+                block
+            },
+            None => {
+                // 没有找到区块，返回 None 或者在这里处理未找到的情况
+                info!("No block found for {:?}", qc_block_id);
+                return Ok(());
             }
-            Err(e) => Err(e), // Propagate errors from the store.read function
         };
     
-        let block_option = block_option?;
-    
-        // Ensure the block is not already committed.
-        // Uncomment and implement if needed
-        // if self.storage.is_block_committed(&qc_block_id).await {
-        //     info!("Block {:?} is already committed", qc_block_id);
-        //     return Ok(());
-        // }
-    
-        // Step 3: Check that the sender of the ComQC matches the block's author.
-        if let Some(block) = block_option {
-            if com_qc.sender != block.author {
-                return Err(ConsensusError::InvalidComQC("Sender does not match block author".into()));
-            }
-    
-            // Step 4: Commit the block and any uncommitted ancestors.
-            info!("Committing block {:?} based on ComQC", qc_block_id);
-            self.commit(block).await?;
-        } else {
-            // Handle the case where the block was not found and was requested
-            info!("Block {:?} not found, requested from synchronizer", qc_block_id);
-        }
-    
-        // Step 5: Update high QC and round if necessary.
-        // Uncomment and implement if necessary
-        // if qc_round > self.round {
-        //     self.high_qc = com_qc;
-        //     self.round = qc_round;
-        // }
+        // Step 3: Commit the block and any uncommitted ancestors.
+        info!("Committing block {:?} based on ComQC", qc_block_id);
+        self.commit(block).await?;
     
         Ok(())
     }
-    
+       
 
     async fn handle_timeout(&mut self, timeout: &Timeout) -> ConsensusResult<()> {
         debug!("Processing {:?}", timeout);

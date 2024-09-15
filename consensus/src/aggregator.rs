@@ -1,7 +1,7 @@
 use crate::config::{Committee, Stake};
 use crate::consensus::Round;
 use crate::error::{ConsensusError, ConsensusResult};
-use crate::messages::{Timeout, Vote, ComVote, QC, ComQc, TC};
+use crate::messages::{Timeout, Vote, ComVote, QC, ComQC, TC};
 use crypto::Hash as _;
 use crypto::{Digest, PublicKey, Signature};
 use std::collections::{HashMap, HashSet};
@@ -123,6 +123,50 @@ impl QCMaker {
         Ok(None)
     }
 }
+
+pub struct ComQCMaker {
+    weight: Stake,
+    com_votes: Vec<(PublicKey, Signature)>,  // 存储ComVote中的公钥和签名
+    used: HashSet<PublicKey>,                // 防止重复投票的集合
+}
+
+impl ComQCMaker {
+    pub fn new() -> Self {
+        Self {
+            weight: 0,
+            com_votes: Vec::new(),
+            used: HashSet::new(),
+        }
+    }
+
+    /// 尝试将一个 ComVote 附加到部分投票中，生成 ComQC。
+    pub fn append(&mut self, com_vote: ComVote, committee: &Committee) -> ConsensusResult<Option<ComQC>> {
+        let author = com_vote.author;
+
+        // 确保该节点的首次投票有效，防止重复投票
+        ensure!(
+            self.used.insert(author),
+            ConsensusError::AuthorityReuse(author)
+        );
+
+        // 将投票者的公钥和签名添加到 com_votes 中
+        self.com_votes.push((author, com_vote.signature));
+        self.weight += committee.stake(&author);
+
+        // 如果权重达到了委员会的门槛，则生成 ComQC
+        if self.weight >= committee.quorum_threshold() {
+            self.weight = 0;  // 确保只生成一次 ComQC
+            return Ok(Some(ComQC {
+                hash: com_vote.hash.clone(),  // 使用 ComVote 中的 hash
+                round: com_vote.round,        // 使用 ComVote 中的轮次
+                com_votes: self.com_votes.clone(),  // 收集到的 ComVote
+            }));
+        }
+
+        Ok(None)  // 如果未达到门槛，则不生成 ComQC
+    }
+}
+
 
 struct TCMaker {
     weight: Stake,

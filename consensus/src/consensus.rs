@@ -4,7 +4,7 @@ use crate::error::ConsensusError;
 use crate::helper::Helper;
 use crate::leader::LeaderElector;
 use crate::mempool::MempoolDriver;
-use crate::messages::{Block, Timeout, Vote, ComVote, ComQc, TC};
+use crate::messages::{Block, Timeout, Vote, ComVote, ComQC, TC};
 use crate::proposer::Proposer;
 use crate::synchronizer::Synchronizer;
 use async_trait::async_trait;
@@ -34,7 +34,7 @@ pub enum ConsensusMessage {
     Propose(Block),
     Vote(Vote),
     ComVote(ComVote),
-    ComQc(ComQc),
+    ComQC(ComQC),
     Timeout(Timeout),
     TC(TC),
     SyncRequest(Digest, PublicKey),

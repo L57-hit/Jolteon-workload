@@ -1,10 +1,10 @@
-use crate::aggregator::Aggregator;
+use crate::aggregator::{Aggregator, ComAggregator};
 use crate::config::Committee;
 use crate::consensus::{ConsensusMessage, Round};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::MempoolDriver;
-use crate::messages::{Block, Timeout, Vote, ComVote, QC, ComQc, TC};
+use crate::messages::{Block, Timeout, Vote, ComVote, QC, ComQC, TC};
 use crate::proposer::ProposerMessage;
 use crate::synchronizer::Synchronizer;
 use crate::timer::Timer;
@@ -37,11 +37,11 @@ pub struct Core {
     tx_commit: Sender<Block>,
     round: Round,
     last_voted_round: Round,
-    last_com_voted_round: Round,
     last_committed_round: Round,
     high_qc: QC,
     timer: Timer,
     aggregator: Aggregator,
+    com_aggregator: ComAggregator,
     network: SimpleSender,
 }
 
@@ -80,6 +80,7 @@ impl Core {
                 high_qc: QC::genesis(),
                 timer: Timer::new(timeout_delay),
                 aggregator: Aggregator::new(committee),
+                com_aggregator: ComAggregator::new(committee),
                 network: SimpleSender::new(),
             }
             .run()
@@ -263,6 +264,7 @@ async fn make_com_vote(&mut self, qc: &QC) -> Option<ComVote> {
     }
 
     async fn handle_com_vote(&mut self, com_vote: &ComVote) -> ConsensusResult<()> {
+        // 记录正在处理的 com_vote
         debug!("Processing {:?}", com_vote);
         
         // 如果接收到的 com vote 所属轮次小于当前轮次，直接返回
@@ -278,31 +280,82 @@ async fn make_com_vote(&mut self, qc: &QC) -> Option<ComVote> {
             debug!("Assembled ComQC {:?}", com_qc);
     
             // 如果生成了 com_qc，则处理它
-            self.handle_com_qc(&com_qc).await;
+            self.handle_com_qc(com_qc).await;
     
             // 使用现有的消息发送机制发送 ComQC 给其他节点
-        let message = ConsensusMessage::ComQC(com_qc); // 假设 ConsensusMessage::ComQC 是定义好的消息类型
-        let addresses = self.committee.broadcast_addresses(); // 获取要广播的地址列表
-
-        for address in addresses {
-            // 假设已有的 self.network.send 函数用于发送消息
-            self.network.send(address, &message).await?;
-        }
+            debug!("Broadcasting ComQC {:?}", com_qc);
+    
+            // 获取要广播的地址列表
+            let addresses = self
+                .committee
+                .broadcast_addresses(&self.name)
+                .into_iter()
+                .map(|(_, address)| address)
+                .collect::<Vec<_>>();
+    
+            // 序列化 ComQC 消息
+            let message = bincode::serialize(&ConsensusMessage::ComQC(com_qc.clone()))
+                .expect("Failed to serialize ComQC message");
+    
+            // 广播消息
+            self.network
+                .broadcast(addresses, Bytes::from(message))
+                .await;
+    
+            debug!("ComQC broadcasted successfully");
         }
     
         Ok(())
     }
     
+    
 
-    async fn handle_com_qc(&mut self, com_qc: &ComQc) -> ConsensusResult<()> {
-        // 验证 com qc 的有效性
-        if self.verify_com_qc(com_qc).is_ok() {
-            // 提交对应的区块
-            let block = self.block_store.get(&com_qc.block_id);
-            if let Some(b0) = block {
-                self.commit(b0).await?;
+    pub async fn handle_com_qc(&mut self, com_qc: ComQC) -> ConsensusResult<()> {
+        let qc_block_id = com_qc.hash;
+        
+        // Step 1: Verify that the ComQC is valid.
+        com_qc.verify(&self.committee)?;
+    
+        // Step 2: Ensure the block corresponding to the ComQC exists.
+        let block_option: Result<Option<Block>, _> = match self.store.read(qc_block_id.to_vec()).await {
+            Ok(Some(bytes)) => Ok(Some(bincode::deserialize(&bytes)?)),
+            Ok(None) => {
+                debug!("Processing of {} suspended: missing block", qc_block_id);
+                return Ok(()); // Block not found, processing suspended
             }
+            Err(e) => Err(e), // Propagate errors from the store.read function
+        };
+    
+        let block_option = block_option?;
+    
+        // Ensure the block is not already committed.
+        // Uncomment and implement if needed
+        // if self.storage.is_block_committed(&qc_block_id).await {
+        //     info!("Block {:?} is already committed", qc_block_id);
+        //     return Ok(());
+        // }
+    
+        // Step 3: Check that the sender of the ComQC matches the block's author.
+        if let Some(block) = block_option {
+            if com_qc.sender != block.author {
+                return Err(ConsensusError::InvalidComQC("Sender does not match block author".into()));
+            }
+    
+            // Step 4: Commit the block and any uncommitted ancestors.
+            info!("Committing block {:?} based on ComQC", qc_block_id);
+            self.commit(block).await?;
+        } else {
+            // Handle the case where the block was not found and was requested
+            info!("Block {:?} not found, requested from synchronizer", qc_block_id);
         }
+    
+        // Step 5: Update high QC and round if necessary.
+        // Uncomment and implement if necessary
+        // if qc_round > self.round {
+        //     self.high_qc = com_qc;
+        //     self.round = qc_round;
+        // }
+    
         Ok(())
     }
     
@@ -430,7 +483,7 @@ if let Some(vote) = self.make_vote(block).await {
     
     // 获取下一个轮次的领导者
     let next_leader = self.leader_elector.get_leader(self.round + 1);
-    let current_leader = block.proposer; // 当前区块的领导者
+    let current_leader = block.author; // 当前区块的领导者
 
     // 发送投票给下一个轮次的领导者
     if next_leader == self.name {

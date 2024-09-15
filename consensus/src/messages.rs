@@ -146,6 +146,21 @@ impl Vote {
     }
 }
 
+impl Hash for Vote {
+    fn digest(&self) -> Digest {
+        let mut hasher = Sha512::new();
+        hasher.update(&self.hash);
+        hasher.update(self.round.to_le_bytes());
+        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
+    }
+}
+
+impl fmt::Debug for Vote {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "V({}, {}, {})", self.author, self.round, self.hash)
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ComVote {
     pub hash: Digest,        // 区块的哈希
@@ -191,21 +206,27 @@ impl ComVote {
     }
 }
 
-
-impl Hash for Vote {
+impl Hash for ComVote {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
-        hasher.update(&self.hash);
-        hasher.update(self.round.to_le_bytes());
-        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
+        hasher.update(&self.hash); // 使用区块的哈希
+        hasher.update(self.round.to_le_bytes()); // 使用轮次
+        Digest(hasher.finalize().as_slice()[..32].try_into().unwrap()) // 返回32字节的哈希值
     }
 }
 
-impl fmt::Debug for Vote {
+impl fmt::Debug for ComVote {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "V({}, {}, {})", self.author, self.round, self.hash)
+        write!(
+            f, 
+            "ComVote({}, {}, {})", 
+            self.author,  // 投票者
+            self.round,   // 轮次
+            self.hash     // 区块哈希
+        )
     }
 }
+
 
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct QC {
@@ -273,13 +294,14 @@ impl QC {
 
 
 #[derive(Clone, Serialize, Deserialize, Default)]
-pub struct ComQc {
+pub struct ComQC {
     pub hash: Digest,
     pub round: Round,
     pub com_votes: Vec<(PublicKey, Signature)>, // 由com vote构成的签名集合
+    pub sender: PublicKey,  // 添加发送者字段
 }
 
-impl ComQc {
+impl ComQC {
     pub fn new(hash: Digest, round: Round, com_votes: Vec<(PublicKey, Signature)>) -> Self {
         Self {
             hash,
@@ -288,9 +310,9 @@ impl ComQc {
         }
     }
 
-    // 验证 ComQc 的有效性
+    // 验证 ComQC 的有效性
     pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
-        // 确保 ComQc 拥有足够多的 com votes
+        // 确保 ComQC 拥有足够多的 com votes
         let mut weight = 0;
         let mut used = HashSet::new();
         for (name, _) in self.com_votes.iter() {
@@ -318,13 +340,13 @@ impl ComQc {
     }
 }
 
-impl fmt::Debug for ComQc {
+impl fmt::Debug for ComQC {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "ComQc({}, {})", self.hash, self.round)
+        write!(f, "ComQC({}, {},)", self.hash, self.round,)
     }
 }
 
-impl PartialEq for ComQc {
+impl PartialEq for ComQC {
     fn eq(&self, other: &Self) -> bool {
         self.hash == other.hash && self.round == other.round
     }

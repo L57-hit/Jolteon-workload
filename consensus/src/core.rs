@@ -23,6 +23,53 @@ use tokio::sync::mpsc::{Receiver, Sender};
 #[path = "tests/core_tests.rs"]
 pub mod core_tests;
 
+// impl Core {
+//     #[allow(clippy::too_many_arguments)]
+//     pub fn spawn(
+//         name: PublicKey,
+//         committee: Committee,  // 仍然传递 `Committee` 实例
+//         signature_service: SignatureService,
+//         store: Store,
+//         leader_elector: LeaderElector,
+//         mempool_driver: MempoolDriver,
+//         synchronizer: Synchronizer,
+//         timeout_delay: u64,
+//         rx_message: Receiver<ConsensusMessage>,
+//         rx_loopback: Receiver<Block>,
+//         tx_proposer: Sender<ProposerMessage>,
+//         tx_commit: Sender<Block>,
+//     ) {
+//         let committee_ref = &committee;  // 创建对 `Committee` 的引用
+        
+//         tokio::spawn(async move {
+//             Self {
+//                 name,
+//                 committee: committee.clone(),  // 仍然在 `Core` 中存储一个克隆的 `Committee`
+//                 signature_service,
+//                 store,
+//                 leader_elector,
+//                 mempool_driver,
+//                 synchronizer,
+//                 rx_message,
+//                 rx_loopback,
+//                 tx_proposer,
+//                 tx_commit,
+//                 round: 1,
+//                 last_voted_round: 0,
+//                 last_committed_round: 0,
+//                 high_qc: QC::genesis(),
+//                 timer: Timer::new(timeout_delay),
+//                 aggregator: Aggregator::new(committee_ref),  // 传递引用
+//                 com_aggregator: ComAggregator::new(committee_ref),  // 传递引用
+//                 network: SimpleSender::new(),
+//             }
+//             .run()
+//             .await
+//         });
+//     }
+
+
+
 pub struct Core {
     name: PublicKey,
     committee: Committee,
@@ -40,12 +87,12 @@ pub struct Core {
     last_committed_round: Round,
     high_qc: QC,
     timer: Timer,
-    aggregator: Aggregator,
-    com_aggregator: ComAggregator,
+    aggregator: Aggregator<'a>,      // 现在有生命周期参数
+    com_aggregator: ComAggregator<'a>, // 现在有生命周期参数,
     network: SimpleSender,
 }
 
-impl Core {
+impl<'a> Core<'a> {
     #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         name: PublicKey,
@@ -61,10 +108,12 @@ impl Core {
         tx_proposer: Sender<ProposerMessage>,
         tx_commit: Sender<Block>,
     ) {
+        let committee_ref = &committee; // 创建对 `Committee` 的引用
+        
         tokio::spawn(async move {
             Self {
                 name,
-                committee: committee.clone(),
+                committee: committee.clone(), // 如果需要克隆 `Committee`
                 signature_service,
                 store,
                 leader_elector,
@@ -79,14 +128,60 @@ impl Core {
                 last_committed_round: 0,
                 high_qc: QC::genesis(),
                 timer: Timer::new(timeout_delay),
-                aggregator: Aggregator::new(committee),
-                com_aggregator: ComAggregator::new(committee),
+                aggregator: Aggregator::new(committee_ref),  // 传递引用
+                com_aggregator: ComAggregator::new(committee_ref),  // 传递引用
                 network: SimpleSender::new(),
             }
             .run()
             .await
         });
     }
+
+
+
+// impl Core {
+//     #[allow(clippy::too_many_arguments)]
+//     pub fn spawn(
+//         name: PublicKey,
+//         committee: Committee,
+//         signature_service: SignatureService,
+//         store: Store,
+//         leader_elector: LeaderElector,
+//         mempool_driver: MempoolDriver,
+//         synchronizer: Synchronizer,
+//         timeout_delay: u64,
+//         rx_message: Receiver<ConsensusMessage>,
+//         rx_loopback: Receiver<Block>,
+//         tx_proposer: Sender<ProposerMessage>,
+//         tx_commit: Sender<Block>,
+//     ) {
+//         let committee_ref = &committee;  // 创建对 `Committee` 的引用
+//         tokio::spawn(async move {
+//             Self {
+//                 name,
+//                 committee: committee.clone(),
+//                 signature_service,
+//                 store,
+//                 leader_elector,
+//                 mempool_driver,
+//                 synchronizer,
+//                 rx_message,
+//                 rx_loopback,
+//                 tx_proposer,
+//                 tx_commit,
+//                 round: 1,
+//                 last_voted_round: 0,
+//                 last_committed_round: 0,
+//                 high_qc: QC::genesis(),
+//                 timer: Timer::new(timeout_delay),
+//                 aggregator: Aggregator::new(committee_ref),
+//                 com_aggregator: ComAggregator::new(committee_ref),
+//                 network: SimpleSender::new(),
+//             }
+//             .run()
+//             .await
+//         });
+//     }
 
     async fn store_block(&mut self, block: &Block) {
         let key = block.digest().to_vec();

@@ -10,14 +10,14 @@ use std::collections::{HashMap, HashSet};
 #[path = "tests/aggregator_tests.rs"]
 pub mod aggregator_tests;
 
-pub struct Aggregator {
-    committee: Committee,
+pub struct Aggregator<'a> {
+    committee: &'a Committee,  // 使用 Committee 的引用
     votes_aggregators: HashMap<Round, HashMap<Digest, Box<QCMaker>>>,
     timeouts_aggregators: HashMap<Round, Box<TCMaker>>,
 }
 
-impl Aggregator {
-    pub fn new(committee: Committee) -> Self {
+impl<'a> Aggregator<'a> {
+    pub fn new(committee: &'a Committee) -> Self {
         Self {
             committee,
             votes_aggregators: HashMap::new(),
@@ -26,27 +26,19 @@ impl Aggregator {
     }
 
     pub fn add_vote(&mut self, vote: Vote) -> ConsensusResult<Option<QC>> {
-        // TODO [issue #7]: A bad node may make us run out of memory by sending many votes
-        // with different round numbers or different digests.
-
-        // Add the new vote to our aggregator and see if we have a QC.
         self.votes_aggregators
             .entry(vote.round)
             .or_insert_with(HashMap::new)
             .entry(vote.digest())
             .or_insert_with(|| Box::new(QCMaker::new()))
-            .append(vote, &self.committee)
+            .append(vote, self.committee)
     }
 
     pub fn add_timeout(&mut self, timeout: Timeout) -> ConsensusResult<Option<TC>> {
-        // TODO: A bad node may make us run out of memory by sending many timeouts
-        // with different round numbers.
-
-        // Add the new timeout to our aggregator and see if we have a TC.
         self.timeouts_aggregators
             .entry(timeout.round)
             .or_insert_with(|| Box::new(TCMaker::new()))
-            .append(timeout, &self.committee)
+            .append(timeout, self.committee)
     }
 
     pub fn cleanup(&mut self, round: &Round) {
@@ -55,13 +47,13 @@ impl Aggregator {
     }
 }
 
-pub struct ComAggregator {
-    committee: Committee,
-    com_votes_aggregators: HashMap<Round, HashMap<Digest, Box<ComQCMaker>>>, // 用于按轮次和区块哈希聚合ComVote
+pub struct ComAggregator<'a> {
+    committee: &'a Committee,  // 使用 Committee 的引用
+    com_votes_aggregators: HashMap<Round, HashMap<Digest, Box<ComQCMaker>>>,
 }
 
-impl ComAggregator {
-    pub fn new(committee: Committee) -> Self {
+impl<'a> ComAggregator<'a> {
+    pub fn new(committee: &'a Committee) -> Self {
         Self {
             committee,
             com_votes_aggregators: HashMap::new(),
@@ -69,20 +61,93 @@ impl ComAggregator {
     }
 
     pub fn add_com_vote(&mut self, com_vote: ComVote) -> ConsensusResult<Option<ComQC>> {
-        // 将新的com_vote添加到聚合器中，并检查是否已经有足够的ComVote生成ComQC
         self.com_votes_aggregators
             .entry(com_vote.round)
             .or_insert_with(HashMap::new)
-            .entry(com_vote.hash.clone()) // 使用ComVote中的hash作为键
+            .entry(com_vote.hash.clone())
             .or_insert_with(|| Box::new(ComQCMaker::new()))
-            .append(com_vote, &self.committee)
+            .append(com_vote, self.committee)
     }
 
     pub fn cleanup(&mut self, round: &Round) {
-        // 清理旧轮次的投票数据，释放内存
         self.com_votes_aggregators.retain(|k, _| k >= round);
     }
 }
+
+
+// pub struct Aggregator {
+//     committee: Committee,
+//     votes_aggregators: HashMap<Round, HashMap<Digest, Box<QCMaker>>>,
+//     timeouts_aggregators: HashMap<Round, Box<TCMaker>>,
+// }
+
+// impl Aggregator {
+//     pub fn new(committee: Committee) -> Self {
+//         Self {
+//             committee,
+//             votes_aggregators: HashMap::new(),
+//             timeouts_aggregators: HashMap::new(),
+//         }
+//     }
+
+//     pub fn add_vote(&mut self, vote: Vote) -> ConsensusResult<Option<QC>> {
+//         // TODO [issue #7]: A bad node may make us run out of memory by sending many votes
+//         // with different round numbers or different digests.
+
+//         // Add the new vote to our aggregator and see if we have a QC.
+//         self.votes_aggregators
+//             .entry(vote.round)
+//             .or_insert_with(HashMap::new)
+//             .entry(vote.digest())
+//             .or_insert_with(|| Box::new(QCMaker::new()))
+//             .append(vote, &self.committee)
+//     }
+
+//     pub fn add_timeout(&mut self, timeout: Timeout) -> ConsensusResult<Option<TC>> {
+//         // TODO: A bad node may make us run out of memory by sending many timeouts
+//         // with different round numbers.
+
+//         // Add the new timeout to our aggregator and see if we have a TC.
+//         self.timeouts_aggregators
+//             .entry(timeout.round)
+//             .or_insert_with(|| Box::new(TCMaker::new()))
+//             .append(timeout, &self.committee)
+//     }
+
+//     pub fn cleanup(&mut self, round: &Round) {
+//         self.votes_aggregators.retain(|k, _| k >= round);
+//         self.timeouts_aggregators.retain(|k, _| k >= round);
+//     }
+// }
+
+// pub struct ComAggregator {
+//     committee: Committee,
+//     com_votes_aggregators: HashMap<Round, HashMap<Digest, Box<ComQCMaker>>>, // 用于按轮次和区块哈希聚合ComVote
+// }
+
+// impl ComAggregator {
+//     pub fn new(committee: Committee) -> Self {
+//         Self {
+//             committee,
+//             com_votes_aggregators: HashMap::new(),
+//         }
+//     }
+
+//     pub fn add_com_vote(&mut self, com_vote: ComVote) -> ConsensusResult<Option<ComQC>> {
+//         // 将新的com_vote添加到聚合器中，并检查是否已经有足够的ComVote生成ComQC
+//         self.com_votes_aggregators
+//             .entry(com_vote.round)
+//             .or_insert_with(HashMap::new)
+//             .entry(com_vote.hash.clone()) // 使用ComVote中的hash作为键
+//             .or_insert_with(|| Box::new(ComQCMaker::new()))
+//             .append(com_vote, &self.committee)
+//     }
+
+//     pub fn cleanup(&mut self, round: &Round) {
+//         // 清理旧轮次的投票数据，释放内存
+//         self.com_votes_aggregators.retain(|k, _| k >= round);
+//     }
+// }
 
 
 struct QCMaker {

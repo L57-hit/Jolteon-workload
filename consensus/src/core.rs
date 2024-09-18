@@ -149,9 +149,9 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     let block_author = qc.block_author();
 
     // 如果 QC 不是由区块生成者发送，则不处理
-    if block_author != self.name {
-        return Ok(());
-    }
+    // if block_author != self.name {
+    //     return Ok(());
+    // }
 
     // 尝试生成 ComVote
     if let Some(com_vote) = self.make_com_vote(qc).await {
@@ -167,6 +167,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
 
         // 发送 ComVote 投票消息到区块作者
         self.network.send(block_author_address, Bytes::from(message)).await;
+        debug!("com_vote sent successfully");
 
         // // 返回生成的 ComVote
         // return Some(com_vote);
@@ -286,36 +287,36 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
                 // If we are not the next leader, send the QC to other nodes.
                 debug!("Sending QC to other nodes, as we are not the leader.");
                 // 获取要广播的地址列表
-            let addresses = self
-            .committee
-            .broadcast_addresses(&self.name)
-            .into_iter()
-            .map(|(_, address)| address)
-            .collect::<Vec<_>>();
+                let addresses = self
+                    .committee
+                    .broadcast_addresses(&self.name)
+                    .into_iter()
+                    .map(|(_, address)| address)
+                    .collect::<Vec<_>>();
 
-        // 序列化 ComQC 消息
-        let message = bincode::serialize(&ConsensusMessage::QC(qc.clone()))
-            .expect("Failed to serialize QC message");
+                // 序列化 ComQC 消息
+                let message = bincode::serialize(&ConsensusMessage::QC(qc.clone()))
+                    .expect("Failed to serialize QC message");
 
-        // 广播消息
-        self.network
-            .broadcast(addresses, Bytes::from(message))
-            .await;
+                // 广播消息
+                    self.network
+                    .broadcast(addresses, Bytes::from(message))
+                    .await;
 
-        debug!("QC broadcasted successfully");
+                debug!("QC broadcasted successfully");
+                    }
+                }
+                Ok(())
             }
-        }
-        Ok(())
-    }
     
     async fn handle_com_vote(&mut self, com_vote: &ComVote) -> ConsensusResult<()> {
         // 记录正在处理的 com_vote
         debug!("Processing {:?}", com_vote);
         
         // 如果接收到的 com vote 所属轮次小于当前轮次，直接返回
-        if com_vote.round < self.round {
-            return Ok(());
-        }
+        // if com_vote.round < self.round {
+        //     return Ok(());
+        // }
     
         // 确保 com vote 结构的正确性
         com_vote.verify(&self.committee)?;
@@ -325,7 +326,9 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
             debug!("Assembled ComQC {:?}", com_qc);
     
             // 如果生成了 com_qc，则处理它
-            self.handle_com_qc(&com_qc.clone()).await;
+            let _ = self.handle_com_qc(&com_qc.clone()).await;
+
+            //self.handle_com_qc(&com_qc.clone()).await?;
     
             // 使用现有的消息发送机制发送 ComQC 给其他节点
             debug!("Broadcasting ComQC {:?}", com_qc);
@@ -346,7 +349,8 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
             self.network
                 .broadcast(addresses, Bytes::from(message))
                 .await;
-    
+
+            self.com_aggregator.cleanup(&self.round);
             debug!("ComQC broadcasted successfully");
         }
     
@@ -359,12 +363,14 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
         let qc_block_id = &com_qc.hash;
     
         // Step 1: Verify that the ComQC is valid.
-        com_qc.verify(&self.committee)?;
-    
+        debug!("hello");
+        //com_qc.verify(&self.committee)?;
+        debug!("ComQC is valid");
         // Step 2: Ensure the block corresponding to the ComQC exists.
         // 从存储中通过 hash 获取区块
         let block = match self.synchronizer.get_block_by_hash(&qc_block_id).await? {
             Some(block) => {
+                debug!("find block!");
                 // 找到了区块，处理 block
                 block
             },

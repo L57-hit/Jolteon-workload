@@ -154,10 +154,12 @@ impl Synchronizer {
             Some(bytes) => {
                 // 如果找到了区块字节数据，反序列化并返回区块
                 let block: Block = bincode::deserialize(&bytes)?;
+                debug!("finding block!");
                 Ok(Some(block))
             },
             None => {
                 // 如果没有找到对应区块，则返回 None
+                debug!("not finding block!");
                 Ok(None)
             }
         }

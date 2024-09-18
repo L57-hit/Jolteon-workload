@@ -305,14 +305,22 @@ pub struct ComQC {
 }
 
 impl ComQC {
-    pub fn new(hash: Digest, round: Round, com_votes: Vec<(PublicKey, Signature)>, block_author: PublicKey) -> Self {
-        Self {
-            hash,
-            round,
-            com_votes,
-            block_author,
-        }
-    }
+
+    // pub fn genesis() -> Self {
+    //     ComQC::default()
+    // }
+
+    // pub fn timeout(&self) -> bool {
+    //     self.hash == Digest::default() && self.round != 0
+    // }
+    // pub fn new(hash: Digest, round: Round, com_votes: Vec<(PublicKey, Signature)>, block_author: PublicKey) -> Self {
+    //     Self {
+    //         hash,
+    //         round,
+    //         com_votes,
+    //         block_author,
+    //     }
+    // }
 
     // 验证 ComQC 的有效性
     pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
@@ -330,7 +338,7 @@ impl ComQC {
             weight >= committee.quorum_threshold(),
             ConsensusError::QCRequiresQuorum
         );
-
+        //debug!("here?");
         // 检查签名的有效性
         Signature::verify_batch(&self.digest(), &self.com_votes).map_err(ConsensusError::from)
     }

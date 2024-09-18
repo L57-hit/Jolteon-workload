@@ -123,6 +123,7 @@ impl Aggregator {
 pub struct ComAggregator {
     committee: Committee,
     com_votes_aggregators: HashMap<Round, HashMap<Digest, Box<ComQCMaker>>>, // 用于按轮次和区块哈希聚合ComVote
+    //timeouts_aggregators: HashMap<Round, Box<TCMaker>>,
 }
 
 impl ComAggregator {
@@ -130,6 +131,7 @@ impl ComAggregator {
         Self {
             committee,
             com_votes_aggregators: HashMap::new(),
+            //timeouts_aggregators: HashMap::new(),
         }
     }
 
@@ -143,9 +145,21 @@ impl ComAggregator {
             .append(com_vote, &self.committee)
     }
 
+    // pub fn add_timeout(&mut self, timeout: Timeout) -> ConsensusResult<Option<TC>> {
+    //     // TODO: A bad node may make us run out of memory by sending many timeouts
+    //     // with different round numbers.
+
+    //     // Add the new timeout to our aggregator and see if we have a TC.
+    //     self.timeouts_aggregators
+    //         .entry(timeout.round)
+    //         .or_insert_with(|| Box::new(TCMaker::new()))
+    //         .append(timeout, &self.committee)
+    // }
+
     pub fn cleanup(&mut self, round: &Round) {
         // 清理旧轮次的投票数据，释放内存
         self.com_votes_aggregators.retain(|k, _| k >= round);
+        //self.timeouts_aggregators.retain(|k, _| k >= round);
     }
 }
 

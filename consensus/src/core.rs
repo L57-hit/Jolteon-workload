@@ -23,53 +23,6 @@ use tokio::sync::mpsc::{Receiver, Sender};
 #[path = "tests/core_tests.rs"]
 pub mod core_tests;
 
-// impl Core {
-//     #[allow(clippy::too_many_arguments)]
-//     pub fn spawn(
-//         name: PublicKey,
-//         committee: Committee,  // 仍然传递 `Committee` 实例
-//         signature_service: SignatureService,
-//         store: Store,
-//         leader_elector: LeaderElector,
-//         mempool_driver: MempoolDriver,
-//         synchronizer: Synchronizer,
-//         timeout_delay: u64,
-//         rx_message: Receiver<ConsensusMessage>,
-//         rx_loopback: Receiver<Block>,
-//         tx_proposer: Sender<ProposerMessage>,
-//         tx_commit: Sender<Block>,
-//     ) {
-//         let committee_ref = &committee;  // 创建对 `Committee` 的引用
-        
-//         tokio::spawn(async move {
-//             Self {
-//                 name,
-//                 committee: committee.clone(),  // 仍然在 `Core` 中存储一个克隆的 `Committee`
-//                 signature_service,
-//                 store,
-//                 leader_elector,
-//                 mempool_driver,
-//                 synchronizer,
-//                 rx_message,
-//                 rx_loopback,
-//                 tx_proposer,
-//                 tx_commit,
-//                 round: 1,
-//                 last_voted_round: 0,
-//                 last_committed_round: 0,
-//                 high_qc: QC::genesis(),
-//                 timer: Timer::new(timeout_delay),
-//                 aggregator: Aggregator::new(committee_ref),  // 传递引用
-//                 com_aggregator: ComAggregator::new(committee_ref),  // 传递引用
-//                 network: SimpleSender::new(),
-//             }
-//             .run()
-//             .await
-//         });
-//     }
-
-
-
 pub struct Core {
     name: PublicKey,
     committee: Committee,
@@ -87,12 +40,12 @@ pub struct Core {
     last_committed_round: Round,
     high_qc: QC,
     timer: Timer,
-    aggregator: Aggregator<'a>,      // 现在有生命周期参数
-    com_aggregator: ComAggregator<'a>, // 现在有生命周期参数,
+    aggregator: Aggregator,      
+    com_aggregator: ComAggregator, 
     network: SimpleSender,
 }
 
-impl<'a> Core<'a> {
+impl Core {
     #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         name: PublicKey,
@@ -108,12 +61,13 @@ impl<'a> Core<'a> {
         tx_proposer: Sender<ProposerMessage>,
         tx_commit: Sender<Block>,
     ) {
-        let committee_ref = &committee; // 创建对 `Committee` 的引用
-        
+        let committee_ref = committee.clone();  
+        let com_committee_ref = committee.clone();
+
         tokio::spawn(async move {
             Self {
                 name,
-                committee: committee.clone(), // 如果需要克隆 `Committee`
+                committee: committee.clone(),
                 signature_service,
                 store,
                 leader_elector,
@@ -128,8 +82,8 @@ impl<'a> Core<'a> {
                 last_committed_round: 0,
                 high_qc: QC::genesis(),
                 timer: Timer::new(timeout_delay),
-                aggregator: Aggregator::new(committee_ref),  // 传递引用
-                com_aggregator: ComAggregator::new(committee_ref),  // 传递引用
+                aggregator: Aggregator::new(committee_ref),
+                com_aggregator: ComAggregator::new(com_committee_ref),
                 network: SimpleSender::new(),
             }
             .run()
@@ -137,51 +91,6 @@ impl<'a> Core<'a> {
         });
     }
 
-
-
-// impl Core {
-//     #[allow(clippy::too_many_arguments)]
-//     pub fn spawn(
-//         name: PublicKey,
-//         committee: Committee,
-//         signature_service: SignatureService,
-//         store: Store,
-//         leader_elector: LeaderElector,
-//         mempool_driver: MempoolDriver,
-//         synchronizer: Synchronizer,
-//         timeout_delay: u64,
-//         rx_message: Receiver<ConsensusMessage>,
-//         rx_loopback: Receiver<Block>,
-//         tx_proposer: Sender<ProposerMessage>,
-//         tx_commit: Sender<Block>,
-//     ) {
-//         let committee_ref = &committee;  // 创建对 `Committee` 的引用
-//         tokio::spawn(async move {
-//             Self {
-//                 name,
-//                 committee: committee.clone(),
-//                 signature_service,
-//                 store,
-//                 leader_elector,
-//                 mempool_driver,
-//                 synchronizer,
-//                 rx_message,
-//                 rx_loopback,
-//                 tx_proposer,
-//                 tx_commit,
-//                 round: 1,
-//                 last_voted_round: 0,
-//                 last_committed_round: 0,
-//                 high_qc: QC::genesis(),
-//                 timer: Timer::new(timeout_delay),
-//                 aggregator: Aggregator::new(committee_ref),
-//                 com_aggregator: ComAggregator::new(committee_ref),
-//                 network: SimpleSender::new(),
-//             }
-//             .run()
-//             .await
-//         });
-//     }
 
     async fn store_block(&mut self, block: &Block) {
         let key = block.digest().to_vec();
@@ -232,7 +141,7 @@ async fn make_com_vote(&self, qc: &QC) -> Option<ComVote> {
 }
 
 /// 处理接收到的 QC
-async fn handle_qc(&mut self, qc: &QC) -> Option<ComVote> {
+async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     // 处理QC以确保其合法性
     self.process_qc(qc).await;
 
@@ -241,7 +150,7 @@ async fn handle_qc(&mut self, qc: &QC) -> Option<ComVote> {
 
     // 如果 QC 不是由区块生成者发送，则不处理
     if block_author != self.name {
-        return None;
+        return Ok(());
     }
 
     // 尝试生成 ComVote
@@ -259,13 +168,12 @@ async fn handle_qc(&mut self, qc: &QC) -> Option<ComVote> {
         // 发送 ComVote 投票消息到区块作者
         self.network.send(block_author_address, Bytes::from(message)).await;
 
-        // 返回生成的 ComVote
-        return Some(com_vote);
+        // // 返回生成的 ComVote
+        // return Some(com_vote);
     }
 
-    None
+     Ok(())
 }
-
 
     async fn commit(&mut self, block: Block) -> ConsensusResult<()> {
         if self.last_committed_round >= block.round {
@@ -352,30 +260,54 @@ async fn handle_qc(&mut self, qc: &QC) -> Option<ComVote> {
     }
 
     #[async_recursion]
+
     async fn handle_vote(&mut self, vote: &Vote) -> ConsensusResult<()> {
         debug!("Processing {:?}", vote);
         if vote.round < self.round {
             return Ok(());
         }
-
+    
         // Ensure the vote is well formed.
         vote.verify(&self.committee)?;
-
+    
         // Add the new vote to our aggregator and see if we have a quorum.
         if let Some(qc) = self.aggregator.add_vote(vote.clone())? {
             debug!("Assembled {:?}", qc);
-
+    
             // Process the QC.
             self.process_qc(&qc).await;
-
-            // Make a new block if we are the next leader.
-            if self.name == self.leader_elector.get_leader(self.round) {
+    
+            // Check if we are the next leader for the current round.
+            let next_leader = self.leader_elector.get_leader(self.round);
+            if self.name == next_leader {
+                // If we are the next leader, generate a new proposal.
                 self.generate_proposal(None).await;
+            } else {
+                // If we are not the next leader, send the QC to other nodes.
+                debug!("Sending QC to other nodes, as we are not the leader.");
+                // 获取要广播的地址列表
+            let addresses = self
+            .committee
+            .broadcast_addresses(&self.name)
+            .into_iter()
+            .map(|(_, address)| address)
+            .collect::<Vec<_>>();
+
+        // 序列化 ComQC 消息
+        let message = bincode::serialize(&ConsensusMessage::QC(qc.clone()))
+            .expect("Failed to serialize QC message");
+
+        // 广播消息
+        self.network
+            .broadcast(addresses, Bytes::from(message))
+            .await;
+
+        debug!("QC broadcasted successfully");
             }
         }
         Ok(())
     }
-
+    
     async fn handle_com_vote(&mut self, com_vote: &ComVote) -> ConsensusResult<()> {
         // 记录正在处理的 com_vote
         debug!("Processing {:?}", com_vote);
@@ -393,7 +325,7 @@ async fn handle_qc(&mut self, qc: &QC) -> Option<ComVote> {
             debug!("Assembled ComQC {:?}", com_qc);
     
             // 如果生成了 com_qc，则处理它
-            self.handle_com_qc(com_qc.clone()).await;
+            self.handle_com_qc(&com_qc.clone()).await;
     
             // 使用现有的消息发送机制发送 ComQC 给其他节点
             debug!("Broadcasting ComQC {:?}", com_qc);
@@ -423,7 +355,7 @@ async fn handle_qc(&mut self, qc: &QC) -> Option<ComVote> {
     
     
 
-    pub async fn handle_com_qc(&mut self, com_qc: ComQC) -> ConsensusResult<()> {
+    pub async fn handle_com_qc(&mut self, com_qc: &ComQC) -> ConsensusResult<()> {
         let qc_block_id = &com_qc.hash;
     
         // Step 1: Verify that the ComQC is valid.
@@ -687,6 +619,9 @@ if let Some(vote) = self.make_vote(block).await {
                 Some(message) = self.rx_message.recv() => match message {
                     ConsensusMessage::Propose(block) => self.handle_proposal(&block).await,
                     ConsensusMessage::Vote(vote) => self.handle_vote(&vote).await,
+                    ConsensusMessage::QC(qc) => self.handle_qc(&qc).await,
+                    ConsensusMessage::ComVote(com_vote) => self.handle_com_vote(&com_vote).await,
+                    ConsensusMessage::ComQC(com_qc) => self.handle_com_qc(&com_qc).await,
                     ConsensusMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
                     ConsensusMessage::TC(tc) => self.handle_tc(tc).await,
                     _ => panic!("Unexpected protocol message")

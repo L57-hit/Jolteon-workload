@@ -140,7 +140,7 @@ impl ComAggregator {
         self.com_votes_aggregators
             .entry(com_vote.round)
             .or_insert_with(HashMap::new)
-            .entry(com_vote.hash.clone()) // 使用ComVote中的hash作为键
+            .entry(com_vote.digest()) // 使用ComVote中的hash作为键
             .or_insert_with(|| Box::new(ComQCMaker::new()))
             .append(com_vote, &self.committee)
     }
@@ -239,8 +239,8 @@ impl ComQCMaker {
             return Ok(Some(ComQC {
                 hash: com_vote.hash.clone(),  // 使用 ComVote 中的 hash
                 round: com_vote.round,        // 使用 ComVote 中的轮次
-                block_author: com_vote.block_author,
                 com_votes: self.com_votes.clone(),  // 收集到的 ComVote
+                block_author: com_vote.block_author,
             }));
         }
 

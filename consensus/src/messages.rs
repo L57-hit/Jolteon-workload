@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt;
+use log::{debug, error, info, warn};
 
 #[cfg(test)]
 #[path = "tests/messages_tests.rs"]
@@ -334,13 +335,23 @@ impl ComQC {
             used.insert(*name);
             weight += voting_rights;
         }
+        debug!("there?");
         ensure!(
             weight >= committee.quorum_threshold(),
             ConsensusError::QCRequiresQuorum
         );
-        //debug!("here?");
+        debug!("here?");
         // 检查签名的有效性
-        Signature::verify_batch(&self.digest(), &self.com_votes).map_err(ConsensusError::from)
+        //Signature::verify_batch(&self.digest(), &self.com_votes).map_err(ConsensusError::from)
+        let result = Signature::verify_batch(&self.digest(), &self.com_votes);
+    
+    // 如果批量验证出错，打印错误信息
+    if let Err(ref e) = result {
+        error!("Signature verification failed: {:?}", e);
+    }
+
+    // 将CryptoError映射为ConsensusError，并返回结果
+    result.map_err(ConsensusError::from)
     }
 
     // 生成唯一的摘要，用于签名验证

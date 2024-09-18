@@ -125,11 +125,12 @@ impl Core {
 async fn make_com_vote(&self, qc: &QC) -> Option<ComVote> {
     // 检查 QC 是否有效
     if let Err(e) = qc.verify(&self.committee) {
+        
         // 如果 QC 无效，打印错误并返回 None
         println!("Invalid QC: {:?}", e);
         return None;
     }
-
+    debug!("qc is valid");
     // 如果 QC 有效，生成 ComVote
     let com_vote = ComVote::new(
         qc,
@@ -363,8 +364,13 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
         let qc_block_id = &com_qc.hash;
     
         // Step 1: Verify that the ComQC is valid.
-        debug!("hello");
-        //com_qc.verify(&self.committee)?;
+        //debug!("hello");
+        if let Err(e) = com_qc.verify(&self.committee) {
+        
+            // 如果 ComQC 无效，打印错误并返回 None
+            println!("Invalid ComQC: {:?}", e);
+            return Err(e);
+        }
         debug!("ComQC is valid");
         // Step 2: Ensure the block corresponding to the ComQC exists.
         // 从存储中通过 hash 获取区块
@@ -383,8 +389,9 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     
         // Step 3: Commit the block and any uncommitted ancestors.
         info!("Committing block {:?} based on ComQC", qc_block_id);
+        self.mempool_driver.cleanup(block.round).await;
         self.commit(block).await?;
-    
+        //self.mempool_driver.cleanup(block.round).await;
         Ok(())
     }
        
@@ -507,7 +514,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
             return Ok(());
         }
                 // 生成投票
-if let Some(vote) = self.make_vote(block).await {
+    if let Some(vote) = self.make_vote(block).await {
     debug!("Created {:?}", vote);
     
     // 获取下一个轮次的领导者

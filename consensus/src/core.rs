@@ -320,7 +320,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
         // }
     
         // 确保 com vote 结构的正确性
-        //com_vote.verify(&self.committee)?;
+        com_vote.verify(&self.committee)?;
         
     
         // 将新的 com vote 添加到 com vote 聚合器中，并检查是否有足够的票生成 ComQC
@@ -366,12 +366,12 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     
         // Step 1: Verify that the ComQC is valid.
         //debug!("hello");
-        // if let Err(e) = com_qc.verify(&self.committee) {
+        if let Err(e) = com_qc.verify(&self.committee) {
         
-        //     // 如果 ComQC 无效，打印错误并返回 None
-        //     println!("Invalid ComQC: {:?}", e);
-        //     return Err(e);
-        // }
+            // 如果 ComQC 无效，打印错误并返回 None
+            println!("Invalid ComQC: {:?}", e);
+            return Err(e);
+        }
         debug!("ComQC is: {:?}",com_qc);
         // Step 2: Ensure the block corresponding to the ComQC exists.
         // 从存储中通过 hash 获取区块

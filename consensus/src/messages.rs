@@ -189,7 +189,7 @@ impl ComVote {
             signature: Signature::default(),
         };
         // 签名 QC 的哈希，标识这个 com vote
-        let signature = signature_service.request_signature(com_vote.digest()).await;
+        let signature = signature_service.request_signature(com_vote.hash.clone()).await;
         
         // 返回包含签名的 ComVote
         Self { signature, ..com_vote }
@@ -368,13 +368,13 @@ impl ComQC {
          // 调试信息：打印批量签名验证的输入数据
     debug!("Verifying batch signatures...");
     debug!("ComQC for block: {:?}", self.hash);
-    debug!("Digest ComQC: {:?}", self.digest());  // 打印消息摘要
+    //debug!("Digest ComQC: {:?}", self.digest());  // 打印消息摘要
 
     for (name, sig) in self.com_votes.iter() {
         debug!("ComVote from authority {}: Signature {:?}", name, sig);
     }
 
-    let result = Signature::verify_batch(&self.digest(), &self.com_votes);
+    let result = Signature::verify_batch(&self.hash.clone(), &self.com_votes);
 
     if let Err(ref e) = result {
         error!("Signature verification failed: {:?}", e);

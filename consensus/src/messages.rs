@@ -189,7 +189,7 @@ impl ComVote {
             signature: Signature::default(),
         };
         // 签名 QC 的哈希，标识这个 com vote
-        let signature = signature_service.request_signature(com_vote.hash.clone()).await;
+        let signature = signature_service.request_signature(com_vote.digest()).await;
         
         // 返回包含签名的 ComVote
         Self { signature, ..com_vote }
@@ -214,6 +214,7 @@ impl Hash for ComVote {
     fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
         hasher.update(&self.hash); // 使用区块的哈希
+        hasher.update(&self.block_author);
         hasher.update(self.round.to_le_bytes()); // 使用轮次
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap()) // 返回32字节的哈希值
     }
@@ -259,12 +260,16 @@ impl QC {
             ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
             used.insert(*name);
             weight += voting_rights;
+            debug!("Vote from authority {} with rights {} accepted", name, voting_rights);
         }
         ensure!(
             weight >= committee.quorum_threshold(),
             ConsensusError::QCRequiresQuorum
         );
-
+        debug!("Digest QC: {:?}", self.digest());  // 打印消息摘要
+        for (name, sig) in self.votes.iter() {
+            debug!("Vote from authority {}: Signature {:?}", name, sig);
+        }
         // Check the signatures.
         Signature::verify_batch(&self.digest(), &self.votes).map_err(ConsensusError::from)
     }
@@ -322,42 +327,102 @@ impl ComQC {
     //         block_author,
     //     }
     // }
-
-    // 验证 ComQC 的有效性
     pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
-        // 确保 ComQC 拥有足够多的 com votes
+        // 初始化变量
         let mut weight = 0;
         let mut used = HashSet::new();
+    
+        // 遍历 `com_votes` 并检查投票的合法性
         for (name, _) in self.com_votes.iter() {
-            ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
+            debug!("Checking vote from authority: {}", name);
+    
+            // 检查是否有重复的投票
+            if used.contains(name) {
+                error!("Authority reused: {}", name);
+                return Err(ConsensusError::AuthorityReuse(*name));
+            }
+    
+            // 检查投票者是否在委员会中
             let voting_rights = committee.stake(name);
-            ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
+            if voting_rights == 0 {
+                error!("Unknown authority: {}", name);
+                return Err(ConsensusError::UnknownAuthority(*name));
+            }
+    
+            // 记录已使用的投票者
             used.insert(*name);
             weight += voting_rights;
+            debug!("ComVote from authority {} with rights {} accepted", name, voting_rights);
         }
-        debug!("there?");
+    
+        // 输出当前累积的权重
+        debug!("Total voting weight: {}", weight);
+    
+        // 检查是否达到了委员会的法定投票权重
         ensure!(
             weight >= committee.quorum_threshold(),
             ConsensusError::QCRequiresQuorum
         );
-        debug!("here?");
-        // 检查签名的有效性
-        //Signature::verify_batch(&self.digest(), &self.com_votes).map_err(ConsensusError::from)
-        let result = Signature::verify_batch(&self.digest(), &self.com_votes);
+        debug!("Quorum threshold reached");
     
-    // 如果批量验证出错，打印错误信息
-    if let Err(ref e) = result {
-        error!("Signature verification failed: {:?}", e);
+         // 调试信息：打印批量签名验证的输入数据
+    debug!("Verifying batch signatures...");
+    debug!("ComQC for block: {:?}", self.hash);
+    debug!("Digest ComQC: {:?}", self.digest());  // 打印消息摘要
+
+    for (name, sig) in self.com_votes.iter() {
+        debug!("ComVote from authority {}: Signature {:?}", name, sig);
     }
 
-    // 将CryptoError映射为ConsensusError，并返回结果
+    let result = Signature::verify_batch(&self.digest(), &self.com_votes);
+
+    if let Err(ref e) = result {
+        error!("Signature verification failed: {:?}", e);
+    } else {
+        debug!("Signature verification succeeded");
+    }
+
     result.map_err(ConsensusError::from)
     }
+    
+    // 验证 ComQC 的有效性
+    // pub fn verify(&self, committee: &Committee) -> ConsensusResult<()> {
+    //     // 确保 ComQC 拥有足够多的 com votes
+    //     let mut weight = 0;
+    //     let mut used = HashSet::new();
+    //     for (name, _) in self.com_votes.iter() {
+    //         ensure!(!used.contains(name), ConsensusError::AuthorityReuse(*name));
+    //         let voting_rights = committee.stake(name);
+    //         ensure!(voting_rights > 0, ConsensusError::UnknownAuthority(*name));
+    //         used.insert(*name);
+    //         weight += voting_rights;
+    //     }
+    //     //debug!("there?");
+
+    //     ensure!(
+    //         weight >= committee.quorum_threshold(),
+    //         ConsensusError::QCRequiresQuorum
+    //     );
+    //     //debug!("weight is: {}", weight);
+    //     //debug!("here?");
+    //     // 检查签名的有效性
+    //     //Signature::verify_batch(&self.digest(), &self.com_votes).map_err(ConsensusError::from)
+    //     let result = Signature::verify_batch(&self.digest(), &self.com_votes);
+    
+    // // 如果批量验证出错，打印错误信息
+    // if let Err(ref e) = result {
+    //     error!("Signature verification failed: {:?}", e);
+    // }
+
+    // // 将CryptoError映射为ConsensusError，并返回结果
+    // result.map_err(ConsensusError::from)
+    // }
 
     // 生成唯一的摘要，用于签名验证
     pub fn digest(&self) -> Digest {
         let mut hasher = Sha512::new();
         hasher.update(&self.hash);
+        hasher.update(&self.block_author);
         hasher.update(self.round.to_le_bytes());
         Digest(hasher.finalize().as_slice()[..32].try_into().unwrap())
     }

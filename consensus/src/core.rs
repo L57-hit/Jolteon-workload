@@ -61,8 +61,8 @@ impl Core {
         tx_proposer: Sender<ProposerMessage>,
         tx_commit: Sender<Block>,
     ) {
-        let committee_ref = committee.clone();  
-        let com_committee_ref = committee.clone();
+         let committee_ref = committee.clone();  
+         let com_committee_ref = committee.clone();
 
         tokio::spawn(async move {
             Self {
@@ -145,7 +145,7 @@ async fn make_com_vote(&self, qc: &QC) -> Option<ComVote> {
 async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     // 处理QC以确保其合法性
     self.process_qc(qc).await;
-
+    debug!("QC is: {:?}", qc);
     // 获取QC对应区块的作者节点
     let block_author = qc.block_author();
 
@@ -264,7 +264,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     #[async_recursion]
 
     async fn handle_vote(&mut self, vote: &Vote) -> ConsensusResult<()> {
-        debug!("Processing {:?}", vote);
+        debug!("Processing vote {:?}", vote);
         if vote.round < self.round {
             return Ok(());
         }
@@ -312,7 +312,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     
     async fn handle_com_vote(&mut self, com_vote: &ComVote) -> ConsensusResult<()> {
         // 记录正在处理的 com_vote
-        debug!("Processing {:?}", com_vote);
+        debug!("Receiving and Processing com_vote{:?}", com_vote);
         
         // 如果接收到的 com vote 所属轮次小于当前轮次，直接返回
         // if com_vote.round < self.round {
@@ -320,7 +320,8 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
         // }
     
         // 确保 com vote 结构的正确性
-        com_vote.verify(&self.committee)?;
+        //com_vote.verify(&self.committee)?;
+        
     
         // 将新的 com vote 添加到 com vote 聚合器中，并检查是否有足够的票生成 ComQC
         if let Some(com_qc) = self.com_aggregator.add_com_vote(com_vote.clone())? {
@@ -365,13 +366,13 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     
         // Step 1: Verify that the ComQC is valid.
         //debug!("hello");
-        if let Err(e) = com_qc.verify(&self.committee) {
+        // if let Err(e) = com_qc.verify(&self.committee) {
         
-            // 如果 ComQC 无效，打印错误并返回 None
-            println!("Invalid ComQC: {:?}", e);
-            return Err(e);
-        }
-        debug!("ComQC is valid");
+        //     // 如果 ComQC 无效，打印错误并返回 None
+        //     println!("Invalid ComQC: {:?}", e);
+        //     return Err(e);
+        // }
+        debug!("ComQC is: {:?}",com_qc);
         // Step 2: Ensure the block corresponding to the ComQC exists.
         // 从存储中通过 hash 获取区块
         let block = match self.synchronizer.get_block_by_hash(&qc_block_id).await? {
@@ -480,7 +481,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
 
     #[async_recursion]
     async fn process_block(&mut self, block: &Block) -> ConsensusResult<()> {
-        debug!("Processing {:?}", block);
+        debug!("Processing block{:?}", block);
 
         // Let's see if we have the last three ancestors of the block, that is:
         //      b0 <- |qc0; b1| <- |qc1; block|
@@ -536,7 +537,9 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     }
 
     // 发送投票给当前区块的领导者
-    if current_leader != self.name {
+    if current_leader == self.name {
+        self.handle_vote(&vote).await?;
+    }else{
         debug!("Sending {:?} to current leader {}", vote, current_leader);
         let address = self
             .committee

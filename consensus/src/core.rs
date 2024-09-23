@@ -130,7 +130,7 @@ async fn make_com_vote(&self, qc: &QC) -> Option<ComVote> {
         println!("Invalid QC: {:?}", e);
         return None;
     }
-    debug!("qc is valid");
+    //debug!("qc is valid");
     // 如果 QC 有效，生成 ComVote
     let com_vote = ComVote::new(
         qc,
@@ -145,7 +145,7 @@ async fn make_com_vote(&self, qc: &QC) -> Option<ComVote> {
 async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     // 处理QC以确保其合法性
     self.process_qc(qc).await;
-    debug!("QC is: {:?}", qc);
+    //debug!("QC is: {:?}", qc);
     // 获取QC对应区块的作者节点
     let block_author = qc.block_author();
 
@@ -168,7 +168,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
 
         // 发送 ComVote 投票消息到区块作者
         self.network.send(block_author_address, Bytes::from(message)).await;
-        debug!("com_vote sent successfully");
+        //debug!("com_vote sent successfully");
 
         // // 返回生成的 ComVote
         // return Some(com_vote);
@@ -312,7 +312,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     
     async fn handle_com_vote(&mut self, com_vote: &ComVote) -> ConsensusResult<()> {
         // 记录正在处理的 com_vote
-        debug!("Receiving and Processing com_vote{:?}", com_vote);
+        //debug!("Receiving and Processing com_vote{:?}", com_vote);
         
         // 如果接收到的 com vote 所属轮次小于当前轮次，直接返回
         // if com_vote.round < self.round {
@@ -333,7 +333,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
             //self.handle_com_qc(&com_qc.clone()).await?;
     
             // 使用现有的消息发送机制发送 ComQC 给其他节点
-            debug!("Broadcasting ComQC {:?}", com_qc);
+            //debug!("Broadcasting ComQC {:?}", com_qc);
     
             // 获取要广播的地址列表
             let addresses = self
@@ -363,6 +363,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
 
     pub async fn handle_com_qc(&mut self, com_qc: &ComQC) -> ConsensusResult<()> {
         let qc_block_id = &com_qc.hash;
+
     
         // Step 1: Verify that the ComQC is valid.
         //debug!("hello");
@@ -372,12 +373,12 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
             println!("Invalid ComQC: {:?}", e);
             return Err(e);
         }
-        debug!("ComQC is: {:?}",com_qc);
+        //debug!("ComQC is: {:?}",com_qc);
         // Step 2: Ensure the block corresponding to the ComQC exists.
         // 从存储中通过 hash 获取区块
         let block = match self.synchronizer.get_block_by_hash(&qc_block_id).await? {
             Some(block) => {
-                debug!("find block!");
+                //debug!("find block!");
                 // 找到了区块，处理 block
                 block
             },

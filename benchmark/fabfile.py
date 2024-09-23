@@ -12,11 +12,11 @@ from benchmark.remote import Bench, BenchError
 def local(ctx):
     """Run benchmarks on localhost"""
     bench_params = {
-        "faults": 0,
-        "nodes": 4,
+        "faults": 3,
+        "nodes": 10,
         "rate": 1_000,
         "tx_size": 512,
-        "duration": 50,
+        "duration": 20,
     }
     node_params = {
         "consensus": {

@@ -1,8 +1,8 @@
 {
-    "testbed": "alberto-hotstuff",
+    "testbed": "LBFT",
     "key": {
-        "name": "aws",
-        "path": "/Users/alberto/.ssh/aws"
+        "name": "mykey",
+        "path": "/home/lty/.ssh/mykey.pem"
     },
     "ports": {
         "consensus": 8000,
@@ -10,18 +10,14 @@
         "front": 6000
     },
     "repo": {
-        "name": "hotstuff",
-        "url": "https://github.com/asonnino/hotstuff.git",
+        "name": "LBFT",
+        "url": "https://github.com/L57-hit/LBFT.git",
         "branch": "main"
     },
     "instances": {
-        "type": "m5d.8xlarge",
+        "type": "t2.micro",
         "regions": [
-            "us-east-1",
-            "eu-north-1",
-            "ap-southeast-2",
-            "us-west-1",
-            "ap-northeast-1"
+            "us-east-1"
         ]
     }
 }

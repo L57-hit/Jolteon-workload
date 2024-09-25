@@ -2,7 +2,7 @@
     "testbed": "LBFT",
     "key": {
         "name": "mykey",
-        "path": "/home/lty/.ssh/mykey.pem"
+        "path": "/home/lty/Desktop/hotstuff/benchmark/mykey.pem"
     },
     "ports": {
         "consensus": 8000,

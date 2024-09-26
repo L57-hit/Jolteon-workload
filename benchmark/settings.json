@@ -2,12 +2,12 @@
     "testbed": "LBFT",
     "key": {
         "name": "mykey",
-        "path": "/home/lty/.ssh/mykey.pem"
+        "path": "/home/ubuntu/LBFT/benchmark/mykey.pem"
     },
     "ports": {
-        "consensus": 8000,
-        "mempool": 7000,
-        "front": 6000
+        "consensus": 18000,
+        "mempool": 17000,
+        "front": 16000
     },
     "repo": {
         "name": "LBFT",
@@ -15,7 +15,7 @@
         "branch": "main"
     },
     "instances": {
-        "type": "t2.micro",
+        "type": "c5.xlarge",
         "regions": [
             "us-east-1"
         ]

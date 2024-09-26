@@ -12,8 +12,8 @@ from benchmark.remote import Bench, BenchError
 def local(ctx):
     """Run benchmarks on localhost"""
     bench_params = {
-        "faults": 3,
-        "nodes": 10,
+        "faults": 1,
+        "nodes": 4,
         "rate": 1_000,
         "tx_size": 512,
         "duration": 20,
@@ -27,7 +27,7 @@ def local(ctx):
             "gc_depth": 50,
             "sync_retry_delay": 5_000,
             "sync_retry_nodes": 3,
-            "batch_size": 15_00000,
+            "batch_size": 15_000,
             "max_batch_delay": 10,
         },
     }

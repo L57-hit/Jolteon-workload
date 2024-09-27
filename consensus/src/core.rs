@@ -144,7 +144,7 @@ async fn make_com_vote(&self, qc: &QC) -> Option<ComVote> {
 /// 处理接收到的 QC
 async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     // 处理QC以确保其合法性
-    self.process_qc(qc).await;
+    //self.process_qc(qc).await;
     //debug!("QC is: {:?}", qc);
     // 获取QC对应区块的作者节点
     let block_author = qc.block_author();

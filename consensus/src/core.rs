@@ -170,7 +170,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
 
             // 发送 ComVote 投票消息到区块作者
             self.network.send(block_author_address, Bytes::from(message)).await;
-            debug!("com_vote sent successfully");
+            //debug!("com_vote sent successfully");
             }
         // 将 ComVote 消息序列化并发送给区块作者
         
@@ -269,7 +269,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     #[async_recursion]
 
     async fn handle_vote(&mut self, vote: &Vote) -> ConsensusResult<()> {
-        //debug!("Processing vote {:?}", vote);
+        debug!("Processing vote {:?}", vote);
         if vote.round < self.round {
             return Ok(());
         }
@@ -310,7 +310,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
                     .broadcast(addresses, Bytes::from(message))
                     .await;
                 
-                debug!("QC broadcasted successfully");
+                //debug!("QC broadcasted successfully");
                     }
                 }
                 Ok(())
@@ -329,7 +329,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
         com_vote.verify(&self.committee)?;
         // 将新的 com vote 添加到 com vote 聚合器中，并检查是否有足够的票生成 ComQC
         if let Some(com_qc) = self.com_aggregator.add_com_vote(com_vote.clone())? {
-            debug!("Assembled ComQC {:?}", com_qc);
+            //debug!("Assembled ComQC {:?}", com_qc);
     
             // 如果生成了 com_qc，则处理它
             let _ = self.handle_com_qc(&com_qc.clone()).await;
@@ -357,7 +357,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
                 .await;
 
             self.com_aggregator.cleanup(&self.round);
-            debug!("ComQC broadcasted successfully");
+            //debug!("ComQC broadcasted successfully");
         }
     
         Ok(())
@@ -521,7 +521,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
         }
                 // 生成投票
         if let Some(vote) = self.make_vote(block).await {
-        //debug!("Created {:?}", vote);
+            debug!("Created {:?}", vote);
     
         // 获取下一个轮次的领导者
         let next_leader = self.leader_elector.get_leader(self.round + 1);
@@ -531,7 +531,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
         if next_leader == self.name {
             self.handle_vote(&vote).await?;
         } else {
-            //debug!("Sending {:?} to {}", vote, next_leader);
+            debug!("Sending {:?} to {}", vote, next_leader);
             let address = self
                 .committee
                 .address(&next_leader)

@@ -145,6 +145,7 @@ async fn make_com_vote(&self, qc: &QC) -> Option<ComVote> {
 async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     // 处理QC以确保其合法性
     //self.process_qc(qc).await;
+    self.update_high_qc(qc);
     //debug!("QC is: {:?}", qc);
     // 获取QC对应区块的作者节点
     let block_author = qc.block_author();
@@ -397,6 +398,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
         info!("Committing block {:?} based on ComQC", qc_block_id);
         self.mempool_driver.cleanup(block.round).await;
         self.commit(block).await?;
+        self.advance_round(com_qc.round).await;
         //self.mempool_driver.cleanup(block.round).await;
         Ok(())
     }

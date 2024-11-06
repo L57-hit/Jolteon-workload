@@ -22,8 +22,8 @@ def local(ctx):
         "consensus": {
             "timeout_delay": 1_000,
             "sync_retry_delay": 10_000,
-            "max_block_data_bytes": 1024,
-            "target_payload_size" : 0,
+            "max_block_data_bytes": 1024, #the number of bytes for a block leader sends
+            "target_payload_size" : 0, # useless
         },
         "mempool": {
             "gc_depth": 50,

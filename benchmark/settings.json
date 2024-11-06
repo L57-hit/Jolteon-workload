@@ -1,8 +1,8 @@
 {
-    "testbed": "LBFT",
+    "testbed": "Cheetah",
     "key": {
         "name": "mykey",
-        "path": "/home/ubuntu/LBFT/benchmark/mykey.pem"
+        "path": "/home/ubuntu/Cheetah/benchmark/mykey.pem"
     },
     "ports": {
         "consensus": 18000,
@@ -10,8 +10,8 @@
         "front": 16000
     },
     "repo": {
-        "name": "LBFT",
-        "url": "https://github.com/L57-hit/LBFT.git",
+        "name": "Cheetah",
+        "url": "https://github.com/L57-hit/Cheetah.git",
         "branch": "main"
     },
     "instances": {

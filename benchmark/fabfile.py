@@ -13,16 +13,16 @@ def local(ctx):
     """Run benchmarks on localhost"""
     bench_params = {
         "faults": 0,
-        "nodes": 10,
+        "nodes": 4,
         "rate": 10_00,
         "tx_size": 512,
         "duration": 20,
     }
     node_params = {
         "consensus": {
-            "timeout_delay": 1_000,
+            "timeout_delay": 10_00,
             "sync_retry_delay": 10_000,
-            "max_block_data_bytes": 1024, #the number of bytes for a block leader sends
+            "max_block_data_bytes": 0, #the number of bytes for a block leader sends
             "target_payload_size" : 0, # useless
         },
         "mempool": {

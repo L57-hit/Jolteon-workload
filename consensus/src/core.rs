@@ -306,6 +306,9 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
                 let message = bincode::serialize(&ConsensusMessage::QC(qc.clone()))
                     .expect("Failed to serialize QC message");
 
+                    let message_size = message.len();
+                    debug!("Serialized qc size: {} bytes", message_size);
+
                 // 广播消息
                     self.network
                     .broadcast(addresses, Bytes::from(message))
@@ -540,6 +543,10 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
                 .expect("The next leader is not in the committee");
             let message = bincode::serialize(&ConsensusMessage::Vote(vote.clone()))
                 .expect("Failed to serialize vote");
+
+            let message_size = message.len();
+            debug!("Serialized vote size: {} bytes", message_size);
+
             self.network.send(address, Bytes::from(message)).await;
         }
         // 发送投票给当前区块的领导者

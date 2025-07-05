@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 配置密钥名称和公钥路径
-KEY_NAME="mykey.pem"
+KEY_NAME="mykey"
 PUBLIC_KEY_FILE="mykey.pub"
 
 # 获取所有支持的区域

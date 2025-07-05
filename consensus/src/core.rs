@@ -145,7 +145,7 @@ async fn make_com_vote(&self, qc: &QC) -> Option<ComVote> {
 async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
     // 处理QC以确保其合法性
     //self.process_qc(qc).await;
-    self.update_high_qc(qc);
+//self.update_high_qc(qc);
     //debug!("QC is: {:?}", qc);
     // 获取QC对应区块的作者节点
     let block_author = qc.block_author();
@@ -302,7 +302,7 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
                     .map(|(_, address)| address)
                     .collect::<Vec<_>>();
 
-                // 序列化 ComQC 消息
+                // 序列化 QC 消息
                 let message = bincode::serialize(&ConsensusMessage::QC(qc.clone()))
                     .expect("Failed to serialize QC message");
 
@@ -398,11 +398,11 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
         };
     
         // Step 3: Commit the block and any uncommitted ancestors.
-        info!("Committing block {:?} based on ComQC", qc_block_id);
-        self.mempool_driver.cleanup(block.round).await;
-        self.commit(block).await?;
-        self.advance_round(com_qc.round).await;
-        //self.mempool_driver.cleanup(block.round).await;
+        //info!("Committing block {:?} based on ComQC", qc_block_id);
+        // self.mempool_driver.cleanup(block.round).await;
+        // self.commit(block).await?;
+        // self.advance_round(com_qc.round).await;
+
         Ok(())
     }
        
@@ -513,10 +513,10 @@ async fn handle_qc(&mut self, qc: &QC) -> ConsensusResult<()> {
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
-        // if b0.round + 1 == b1.round {
-        //     self.mempool_driver.cleanup(b0.round).await;
-        //     self.commit(b0).await?;
-        // }
+         if b0.round + 1 == b1.round {
+             self.mempool_driver.cleanup(b0.round).await;
+             self.commit(b0).await?;
+        }
 
         // Ensure the block's round is as expected.
         // This check is important: it prevents bad leaders from producing blocks

@@ -1,17 +1,17 @@
 {
-    "testbed": "Cheetah",
+    "testbed": "Jolteon-workload",
     "key": {
         "name": "mykey",
-        "path": "/home/ubuntu/Cheetah/benchmark/mykey.pem"
+        "path": "/home/ubuntu/Jolteon-workload/benchmark/mykey.pem"
     },
     "ports": {
-        "consensus": 18000,
-        "mempool": 17000,
-        "front": 16000
+        "consensus": 15000,
+        "mempool": 14000,
+        "front": 13000
     },
     "repo": {
         "name": "Cheetah",
-        "url": "https://github.com/L57-hit/Cheetah.git",
+        "url": "https://github.com/L57-hit/Jolteon-workload.git",
         "branch": "main"
     },
     "instances": {
